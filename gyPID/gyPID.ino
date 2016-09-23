@@ -22,9 +22,9 @@
 #include<AQMath.h>
 #include<Device_I2C.h>
 #include<Gyroscope_ITG3200.h>
-#include <Accelerometer_BMA180.h>
+//#include <Accelerometer_BMA180.h>
 #include <GlobalDefined.h>
-
+#include "acc_filter.h"
 #include <Receiver_328p.h> // for AeroQuad shield v1.x with Arduino Due/Uno and mini shield v1.0 using a standard PWM receiver
 #include <Motors_PWM_Timer.h>
 //Choose how many channels you have available (6, 8 or 10)
@@ -57,13 +57,20 @@ int pitchF, pitchR, rollL, rollR, yawCC, yawCCW;
 //D variables
 int error_p_prev, error_r_prev;
 //I variable
-int error_p_total, error_r_total;
+int error_p_total, error_r_total, error_y_total;
 
 //the maximum change in throttle the pich and roll sticks can make
 #define PITCH_MAX   200
 #define ROLL_MAX    200
 
 #define constrainPPM(x) (constrain((x), 1000,2000))
+float x0, y0, z0;
+
+/*************** for accelerometer*****/
+#define window_size 3
+float target_roll = 0, target_pitch = 0, roll_angle = 0, pitch_angle = 0, yaw_angle, target_yaw = 0, roll_angle_prev, pitch_angle_prev;
+
+/******************/
 
 
 void setup() {
@@ -81,9 +88,7 @@ void setup() {
   computeAccelBias();
   accelScaleFactor[XAXIS] = accelScaleFactor[YAXIS] = accelScaleFactor[ZAXIS] = -0.047;
   measureAccel();
-  ac0x = meterPerSecSec[XAXIS];
-  ac0y = meterPerSecSec[YAXIS];
-  ac0z = meterPerSecSec[ZAXIS];
+ 
 }
 
 void loop() {
@@ -106,15 +111,74 @@ void loop() {
     gyyaw = degrees(gyroRate[ZAXIS]);
 
 
-    acx = meterPerSecSec[XAXIS] - ac0x;
-    acy = meterPerSecSec[YAXIS] - ac0y;
-    acz = meterPerSecSec[ZAXIS] - ac0z;
-    /*
-        Serial.print("\tgyroll: ");
-        Serial.print(gyroll);
-        Serial.print("\tgypitch: ");
-        Serial.print(gypitch);*/
+/**************** accelerometer **************************/
 
+   
+    if(!check) {
+      initiate(meterPerSecSec[ZAXIS], med_bufferz);
+      initiate(meterPerSecSec[XAXIS], med_bufferx);
+      initiate(meterPerSecSec[YAXIS], med_buffery);
+
+                
+      accel_net = sqrt(meterPerSecSec[ZAXIS]*meterPerSecSec[ZAXIS] + meterPerSecSec[XAXIS]*meterPerSecSec[XAXIS] + meterPerSecSec[YAXIS]*meterPerSecSec[YAXIS]);    //accel_net acceleration
+      initiate(accel_net, med_buffer_net);
+      check = 2;
+    } else if(check == 2) {
+      pushupdate(med_bufferz, meterPerSecSec[ZAXIS]);
+      pushupdate(med_bufferx, meterPerSecSec[XAXIS]);
+      pushupdate(med_buffery, meterPerSecSec[YAXIS]);
+
+  
+      accel_z = sort_med(med_bufferz);    //for accel_net
+      accel_x = sort_med(med_bufferx); 
+      accel_y = sort_med(med_buffery);
+      accel_net = sqrt(accel_z*accel_z + accel_x*accel_x + accel_y*accel_y);
+      pushupdate(med_buffer_net, accel_net);
+      accel_net = sort_med(med_buffer_net);
+    }
+    /*if(gypitch < 20){
+      pitch_angle = degrees(atan2(accel_x , sqrt(pow(accel_y, 2) + pow(accel_z , 2))));
+      pitch_angle = pitch_angle - target_pitch;
+      
+    }else{Serial.print("\nPitch:");}
+    if(gyroll < 20){
+       roll_angle = degrees(atan2(accel_y , sqrt(pow(accel_z, 2) + pow(accel_x , 2))));
+        roll_angle = roll_angle - target_roll;
+        
+    }else{Serial.print("\nPitch:");}
+    yaw_angle = degrees(atan2(accel_z , sqrt(pow(accel_x, 2) + pow(accel_y , 2))));
+    yaw_angle = yaw_angle - target_yaw; */
+
+
+      pitch_angle = degrees(atan2(accel_x , sqrt(pow(accel_y, 2) + pow(accel_z , 2))));
+      pitch_angle = pitch_angle - target_pitch;
+      if(pitch_angle - pitch_angle_prev > 10){
+        pitch_angle = 0;
+        Serial.print("\nPitch:");
+      }
+    
+       roll_angle = degrees(atan2(accel_y , sqrt(pow(accel_z, 2) + pow(accel_x , 2))));
+       roll_angle = roll_angle - target_roll;
+       if(roll_angle - roll_angle_prev > 10){
+        roll_angle = 0;
+        Serial.print("\nPitch:");
+       }
+       pitch_angle_prev = pitch_angle;
+       roll_angle_prev = roll_angle; 
+
+//    Serial.print("\nROll:");
+//    Serial.print(roll_angle);
+//    Serial.print("\tPitch:");
+//    Serial.print(pitch_angle);
+//Serial.print("\nYaw:");
+//    Serial.print(roll_angle);
+    
+   
+/******************************************/
+
+
+
+    
     if (receiverCommand[MODE] < 1500) { //Safety Check
       //MOTORS
       motorCommand[FRONT_LEFT]  = 1000;
@@ -124,7 +188,7 @@ void loop() {
       //      Serial.print(" OFF");
 
       //Also zero the integral error
-      error_p_total = error_r_total = 0;
+      error_p_total = error_r_total = 0;error_y_total = 0;
     }
     else {
       pitchF = 0;
@@ -138,10 +202,12 @@ void loop() {
         //lift rear motors up
         // pitch 1500-2000 mapped to pitchR 0-PITCH_MAX
         pitchR = map(pitch, 1500, 2000, 0, PITCH_MAX);
+        pitchF = -pitchR;
       } else if (pitch < 1491) {
         //lift front motors up
         //pitch 1500-1000 mapped to pitchF 0-PITCH_MAX
         pitchF = map(pitch, 1500, 1000, 0, PITCH_MAX);
+        pitchR = -pitchF;
       }
 
       //calculate ROLL compensation for left and right motors
@@ -149,10 +215,12 @@ void loop() {
         //lift left motors up
         //roll 1500-2000 mapped to rollL 0-ROLL_MAX
         rollL = map(roll, 1500, 2000, 0, ROLL_MAX);
+        rollR = -rollL;
       } else if(roll < 1491){
         //lift right motors up
         //roll 1500-1000 mapped to rollR 0-ROLL_MAX
         rollR = map(roll, 1500, 1000, 0, ROLL_MAX);
+        rollL = -rollR;
       }
 
       if (yaw > 1509) {
@@ -207,15 +275,43 @@ void loop() {
        * But I remembers that there is error from original position which has not been compensated and acts in that direction.
        */
 #define I 1
-#define I_MAX 100
-      error_p_total += gypitch;
+#define I_MAX 40
+      error_p_total += gypitch * 0.005;
       pitchF -= constrain(I * error_p_total, -I_MAX, I_MAX );
       pitchR += constrain(I * error_p_total, -I_MAX, I_MAX );
 
-      error_r_total += gyroll;
+      error_r_total += gyroll * 0.005;
       rollL -= constrain(I * error_r_total, -I_MAX, I_MAX);
       rollR += constrain(I * error_r_total, -I_MAX, I_MAX);
 
+
+      error_y_total += gyyaw * 0.005;
+      yawCC += constrain(I * error_y_total, -I_MAX, I_MAX);
+      yawCCW -= constrain(I * error_y_total, -I_MAX, I_MAX);
+//      Serial.print(yawCC);
+
+
+
+
+/******************* Accelerometer PID *************************/
+
+// constrain angles.
+//    roll_angle = constrain();
+
+
+/*#define P_ACC 1
+      rollL += roll_angle * P_ACC;
+      rollR -= roll_angle * P_ACC;
+
+      pitchR += pitch_angle * P_ACC;
+      pitchF -= pitch_angle * P_ACC; */
+
+
+
+/***************************************************************/
+
+
+   /* writing into the motors : last step */
       motorCommand[FRONT_LEFT]  = constrainPPM( throttle + pitchF + rollL + yawCC);
       motorCommand[FRONT_RIGHT] = constrainPPM( throttle + pitchF + rollR + yawCCW);
       motorCommand[REAR_LEFT]   = constrainPPM( throttle + pitchR + rollL + yawCCW);

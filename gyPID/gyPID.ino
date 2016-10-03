@@ -68,7 +68,7 @@ float x0, y0, z0;
 
 /*************** for accelerometer*****/
 #define window_size 3
-float target_roll = 0, target_pitch = 0, roll_angle = 0, pitch_angle = 0, yaw_angle, target_yaw = 0, roll_angle_prev, pitch_angle_prev;
+float target_roll = 0, target_pitch = 0, roll_angle = 0, pitch_angle = 0, yaw_angle, target_yaw = 0, roll_angle_prev = 0, pitch_angle_prev = 0;
 
 /******************/
 
@@ -88,7 +88,8 @@ void setup() {
   computeAccelBias();
   accelScaleFactor[XAXIS] = accelScaleFactor[YAXIS] = accelScaleFactor[ZAXIS] = -0.047;
   measureAccel();
- 
+  pitch_angle_prev = degrees(atan2(accel_x , sqrt(pow(accel_y, 2) + pow(accel_z , 2))));
+  roll_angle_prev = degrees(atan2(accel_y , sqrt(pow(accel_z, 2) + pow(accel_x , 2))));
 }
 
 void loop() {
@@ -136,38 +137,53 @@ void loop() {
       pushupdate(med_buffer_net, accel_net);
       accel_net = sort_med(med_buffer_net);
     }
-    /*if(gypitch < 20){
+ /*   if(gypitch < 60 && gypitch > -60){
       pitch_angle = degrees(atan2(accel_x , sqrt(pow(accel_y, 2) + pow(accel_z , 2))));
       pitch_angle = pitch_angle - target_pitch;
-      
-    }else{Serial.print("\nPitch:");}
-    if(gyroll < 20){
+      pitch_angle_prev = pitch_angle;
+    }else{
+     pitch_angle = pitch_angle_prev;
+        }
+    if(gyroll < 60 && gyroll > -60){
        roll_angle = degrees(atan2(accel_y , sqrt(pow(accel_z, 2) + pow(accel_x , 2))));
-        roll_angle = roll_angle - target_roll;
-        
-    }else{Serial.print("\nPitch:");}
-    yaw_angle = degrees(atan2(accel_z , sqrt(pow(accel_x, 2) + pow(accel_y , 2))));
-    yaw_angle = yaw_angle - target_yaw; */
+       roll_angle = roll_angle - target_roll;
+       roll_angle_prev = roll_angle;
+    }else{
+      roll_angle = roll_angle_prev;
+    }*/
+//    yaw_angle = degrees(atan2(accel_z , sqrt(pow(accel_x, 2) + pow(accel_y , 2))));
+//    yaw_angle = yaw_angle - target_yaw; 
 
 
       pitch_angle = degrees(atan2(accel_x , sqrt(pow(accel_y, 2) + pow(accel_z , 2))));
       pitch_angle = pitch_angle - target_pitch;
-      if(pitch_angle - pitch_angle_prev > 10){
-        pitch_angle = 0;
-        Serial.print("\nPitch:");
-      }
+
+      float pitch_delta = pitch_angle - pitch_angle_prev;
+/*      pitch_angle =  pitch_delta > 10 ? pitch_angle_prev : pitch_delta < 10 ? pitch_angle_prev : pitch_angle;
+*/
+        if(pitch_delta < 2 && pitch_delta > -2){
+          pitch_angle_prev = pitch_angle;   
+        }else{
+          pitch_angle = pitch_angle_prev / 2  ;
+        }
     
        roll_angle = degrees(atan2(accel_y , sqrt(pow(accel_z, 2) + pow(accel_x , 2))));
        roll_angle = roll_angle - target_roll;
-       if(roll_angle - roll_angle_prev > 10){
-        roll_angle = 0;
-        Serial.print("\nPitch:");
-       }
+       
+       float roll_delta = roll_angle - roll_angle_prev;
+//       roll_angle =  roll_delta > 10 ? roll_angle_prev : roll_delta < 10 ? roll_angle_prev : roll_angle;
+       if(roll_delta < 2 && roll_delta > -2){
+          roll_angle_prev = roll_angle;   
+        }else{
+          roll_angle = roll_angle_prev / 2;
+        }
+    
+  
        pitch_angle_prev = pitch_angle;
        roll_angle_prev = roll_angle; 
 
 //    Serial.print("\nROll:");
-//    Serial.print(roll_angle);
+    Serial.print(roll_angle);
 //    Serial.print("\tPitch:");
 //    Serial.print(pitch_angle);
 //Serial.print("\nYaw:");
@@ -299,17 +315,19 @@ void loop() {
 //    roll_angle = constrain();
 
 
-/*#define P_ACC 1
+#define P_ACC 1
       rollL += roll_angle * P_ACC;
       rollR -= roll_angle * P_ACC;
 
-      pitchR += pitch_angle * P_ACC;
-      pitchF -= pitch_angle * P_ACC; */
+//      Serial.println(pitch_angle);
+      pitchR -= pitch_angle * P_ACC;
+      pitchF += pitch_angle * P_ACC; 
 
 
 
 /***************************************************************/
 
+  
 
    /* writing into the motors : last step */
       motorCommand[FRONT_LEFT]  = constrainPPM( throttle + pitchF + rollL + yawCC);

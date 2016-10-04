@@ -68,8 +68,9 @@ float x0, y0, z0;
 
 /*************** for accelerometer*****/
 #define window_size 3
-float target_roll = 0, target_pitch = 0, roll_angle = 0, pitch_angle = 0, yaw_angle, target_yaw = 0, roll_angle_prev = 0, pitch_angle_prev = 0;
-
+float target_roll = 0, target_pitch = 0, roll_angle = 0, pitch_angle = 0, yaw_angle, target_yaw = 0, roll_angle_prev = 0, pitch_angle_prev = 0, yaw_angle_prev = 0;
+float p_ang, r_ang, y_ang;
+int gyro_pitch_acc, gyro_roll_acc, gyro_yaw_acc;
 /******************/
 
 
@@ -90,6 +91,7 @@ void setup() {
   measureAccel();
   pitch_angle_prev = degrees(atan2(accel_x , sqrt(pow(accel_y, 2) + pow(accel_z , 2))));
   roll_angle_prev = degrees(atan2(accel_y , sqrt(pow(accel_z, 2) + pow(accel_x , 2))));
+  yaw_angle_prev = degrees(atan2(accel_z , sqrt(pow(accel_y, 2) + pow(accel_x , 2))));
 }
 
 void loop() {
@@ -111,7 +113,13 @@ void loop() {
     gypitch = degrees(gyroRate[YAXIS]);
     gyyaw = degrees(gyroRate[ZAXIS]);
 
+    gyro_pitch_acc += gypitch;
+    gyro_roll_acc += gyroll;
+    gyro_yaw_acc += gyyaw;
 
+    gyro_pitch_acc = constrain(gyro_pitch_acc, -10, +10);
+    gyro_roll_acc = constrain(gyro_roll_acc, -10, +10);
+    gyro_yaw_acc = constrain(gyro_yaw_acc, -10, +10);
 /**************** accelerometer **************************/
 
    
@@ -137,51 +145,24 @@ void loop() {
       pushupdate(med_buffer_net, accel_net);
       accel_net = sort_med(med_buffer_net);
     }
- /*   if(gypitch < 60 && gypitch > -60){
-      pitch_angle = degrees(atan2(accel_x , sqrt(pow(accel_y, 2) + pow(accel_z , 2))));
-      pitch_angle = pitch_angle - target_pitch;
-      pitch_angle_prev = pitch_angle;
-    }else{
-     pitch_angle = pitch_angle_prev;
-        }
-    if(gyroll < 60 && gyroll > -60){
-       roll_angle = degrees(atan2(accel_y , sqrt(pow(accel_z, 2) + pow(accel_x , 2))));
-       roll_angle = roll_angle - target_roll;
-       roll_angle_prev = roll_angle;
-    }else{
-      roll_angle = roll_angle_prev;
-    }*/
+ 
 //    yaw_angle = degrees(atan2(accel_z , sqrt(pow(accel_x, 2) + pow(accel_y , 2))));
-//    yaw_angle = yaw_angle - target_yaw; 
+//    yaw_angle = yaw_angle - target_yaw;
+      p_ang = degrees(atan2(accel_x , sqrt(pow(accel_y, 2) + pow(accel_z , 2))));
+      p_ang = p_ang - target_pitch;
+      pitch_angle = (pitch_angle + gyro_pitch_acc * 0.01) * 0.95 + 0.05 * (p_ang);
 
+      r_ang = degrees(atan2(accel_y , sqrt(pow(accel_x, 2) + pow(accel_z , 2))));
+      r_ang = r_ang - target_roll;
+      roll_angle = (roll_angle + gyro_roll_acc * 0.01) * 0.95 + 0.05 * (r_ang);
 
-      pitch_angle = degrees(atan2(accel_x , sqrt(pow(accel_y, 2) + pow(accel_z , 2))));
-      pitch_angle = pitch_angle - target_pitch;
+      y_ang = degrees(atan2(accel_z , sqrt(pow(accel_x, 2) + pow(accel_y , 2))));
+      y_ang = y_ang - target_yaw;
+      yaw_angle = (yaw_angle + gyro_yaw_acc * 0.01) * 0.95 + 0.05 * (y_ang);
 
-      float pitch_delta = pitch_angle - pitch_angle_prev;
-/*      pitch_angle =  pitch_delta > 10 ? pitch_angle_prev : pitch_delta < 10 ? pitch_angle_prev : pitch_angle;
-*/
-        if(pitch_delta < 2 && pitch_delta > -2){
-          pitch_angle_prev = pitch_angle;   
-        }else{
-          pitch_angle = pitch_angle_prev / 2  ;
-        }
-    
-       roll_angle = degrees(atan2(accel_y , sqrt(pow(accel_z, 2) + pow(accel_x , 2))));
-       roll_angle = roll_angle - target_roll;
-       
-       float roll_delta = roll_angle - roll_angle_prev;
-//       roll_angle =  roll_delta > 10 ? roll_angle_prev : roll_delta < 10 ? roll_angle_prev : roll_angle;
-       if(roll_delta < 2 && roll_delta > -2){
-          roll_angle_prev = roll_angle;   
-        }else{
-          roll_angle = roll_angle_prev / 2;
-        }
     
   
-       pitch_angle_prev = pitch_angle;
-       roll_angle_prev = roll_angle; 
-
+    
 //    Serial.print("\nROll:");
     Serial.print(roll_angle);
 //    Serial.print("\tPitch:");
@@ -242,11 +223,11 @@ void loop() {
       if (yaw > 1509) {
         //lift left motors up
         //roll 1500-2000 mapped to rollL 0-ROLL_MAX
-        yawCCW = map(roll, 1500, 2000, 0, ROLL_MAX);
+        yawCCW = map(yaw, 1500, 2000, 0, ROLL_MAX);
       } else if(yaw < 1491){
         //lift right motors up
         //roll 1500-1000 mapped to rollR 0-ROLL_MAX
-        yawCC = map(roll, 1500, 1000, 0, ROLL_MAX);
+        yawCC = map(yaw, 1500, 1000, 0, ROLL_MAX);
       }
 
       /* Proportional
@@ -316,13 +297,12 @@ void loop() {
 
 
 #define P_ACC 1
-      rollL += roll_angle * P_ACC;
-      rollR -= roll_angle * P_ACC;
+      rollL -= roll_angle * P_ACC;
+      rollR += roll_angle * P_ACC;
 
 //      Serial.println(pitch_angle);
-      pitchR -= pitch_angle * P_ACC;
-      pitchF += pitch_angle * P_ACC; 
-
+      pitchR += pitch_angle * P_ACC;
+      pitchF -= pitch_angle * P_ACC; 
 
 
 /***************************************************************/

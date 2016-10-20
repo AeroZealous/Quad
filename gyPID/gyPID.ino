@@ -55,7 +55,7 @@ float ac0x, ac0y, ac0z;
 int pitchF, pitchR, rollL, rollR, yawCC, yawCCW;
 
 //D variables
-int error_p_prev, error_r_prev;
+int error_p_prev, error_r_prev, error_y_prev;
 //I variable
 int error_p_total, error_r_total, error_y_total;
 
@@ -150,21 +150,21 @@ void loop() {
 //    yaw_angle = yaw_angle - target_yaw;
       p_ang = degrees(atan2(accel_x , sqrt(pow(accel_y, 2) + pow(accel_z , 2))));
       p_ang = p_ang - target_pitch;
-      pitch_angle = (pitch_angle + gyro_pitch_acc * 0.01) * 0.95 + 0.05 * (p_ang);
+      pitch_angle = (pitch_angle + gyro_pitch_acc * 0.01) * 0.98+ 0.02 * (p_ang);
 
       r_ang = degrees(atan2(accel_y , sqrt(pow(accel_x, 2) + pow(accel_z , 2))));
       r_ang = r_ang - target_roll;
-      roll_angle = (roll_angle + gyro_roll_acc * 0.01) * 0.95 + 0.05 * (r_ang);
+      roll_angle = (roll_angle + gyro_roll_acc * 0.01) * 0.98 + 0.02 * (r_ang);
 
       y_ang = degrees(atan2(accel_z , sqrt(pow(accel_x, 2) + pow(accel_y , 2))));
       y_ang = y_ang - target_yaw;
-      yaw_angle = (yaw_angle + gyro_yaw_acc * 0.01) * 0.95 + 0.05 * (y_ang);
+      yaw_angle = (yaw_angle + gyro_yaw_acc * 0.01) * 0.98 + 0.02 * (y_ang);
 
     
   
     
 //    Serial.print("\nROll:");
-    Serial.print(roll_angle);
+    Serial.print(gyyaw);
 //    Serial.print("\tPitch:");
 //    Serial.print(pitch_angle);
 //Serial.print("\nYaw:");
@@ -224,11 +224,12 @@ void loop() {
         //lift left motors up
         //roll 1500-2000 mapped to rollL 0-ROLL_MAX
         yawCCW = map(yaw, 1500, 2000, 0, ROLL_MAX);
+        yawCC = -yawCCW;
       } else if(yaw < 1491){
         //lift right motors up
         //roll 1500-1000 mapped to rollR 0-ROLL_MAX
         yawCC = map(yaw, 1500, 1000, 0, ROLL_MAX);
-      }
+        yawCCW = -yawCC;      }
 
       /* Proportional
        * Short summary: The larger the error, the harder it tries to compensate.
@@ -244,7 +245,7 @@ void loop() {
       rollL -= gyroll * P;     
       rollR += gyroll * P;     //+ve gyroll indicates right side dive, so compensate by increaseing right thrust
 
-#define Py 2
+#define Py 3
       yawCC  += gyyaw * Py;   //+ve gyyaw indicates clockwise drift of the body, so compensate by increasing clockwise motors speed 
       yawCCW -= gyyaw * Py;   // thus inducing anti-clockwise reaction om the body
 
@@ -257,14 +258,20 @@ void loop() {
 
       int delta_pitch = gypitch - error_p_prev;
       int delta_roll = gyroll - error_r_prev;
-
+      int delta_yaw = gyyaw - error_y_prev;
+      
       pitchF -= delta_pitch * D;
       pitchR += delta_pitch * D;
+      
       rollL -= delta_roll * D;
       rollR += delta_roll * D;
 
+      yawCC += delta_yaw * 0.1;
+      yawCCW -= delta_yaw * 0.1; 
+      
       error_p_prev = gypitch;
       error_r_prev = gyroll;
+      error_y_prev = gyyaw;
       
       /* Integral
        * Short summary: It remembers the bias due to error and tries to equal the +ve and -ve errors.
@@ -281,13 +288,17 @@ void loop() {
       rollL -= constrain(I * error_r_total, -I_MAX, I_MAX);
       rollR += constrain(I * error_r_total, -I_MAX, I_MAX);
 
-
-      error_y_total += gyyaw * 0.005;
+   /*   error_y_total += gyyaw * 0.005;
       yawCC += constrain(I * error_y_total, -I_MAX, I_MAX);
-      yawCCW -= constrain(I * error_y_total, -I_MAX, I_MAX);
+      yawCCW -= constrain(I * error_y_total, -I_MAX, I_MAX); */
+      
+/* #define I_GYRO_YAW
+      error_y_total += gyyaw * 0.005;
+      yawCC += constrain(I_GYRO_YAW * error_y_total, -I_MAX, I_MAX);
+      yawCCW -= constrain(I_GYRO_YAW * error_y_total, -I_MAX, I_MAX);
 //      Serial.print(yawCC);
 
-
+*/
 
 
 /******************* Accelerometer PID *************************/
@@ -304,7 +315,9 @@ void loop() {
       pitchR += pitch_angle * P_ACC;
       pitchF -= pitch_angle * P_ACC; 
 
-
+ /*     yawCC += yaw_angle * P_ACC;
+      yawCCW -= yaw_angle * P_ACC; */ 
+     
 /***************************************************************/
 
   
@@ -316,7 +329,8 @@ void loop() {
       motorCommand[REAR_RIGHT]  = constrainPPM( throttle + pitchR + rollR + yawCC);
     }
 
-    writeMotors();/*
+    writeMotors();
+    /*
     Serial.println();
     Serial.print("pf:");
     Serial.print(pitchF);

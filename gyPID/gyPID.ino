@@ -117,9 +117,9 @@ void loop() {
     gyro_roll_acc += gyroll;
     gyro_yaw_acc += gyyaw;
 
-    gyro_pitch_acc = constrain(gyro_pitch_acc, -10, +10);
-    gyro_roll_acc = constrain(gyro_roll_acc, -10, +10);
-    gyro_yaw_acc = constrain(gyro_yaw_acc, -10, +10);
+//     gyro_pitch_acc = constrain(gyro_pitch_acc, -10, +10);
+//     gyro_roll_acc = constrain(gyro_roll_acc, -10, +10);
+//     gyro_yaw_acc = constrain(gyro_yaw_acc, -10, +10);
 /**************** accelerometer **************************/
 
    
@@ -149,16 +149,16 @@ void loop() {
 //    yaw_angle = degrees(atan2(accel_z , sqrt(pow(accel_x, 2) + pow(accel_y , 2))));
 //    yaw_angle = yaw_angle - target_yaw;
       p_ang = degrees(atan2(accel_x , sqrt(pow(accel_y, 2) + pow(accel_z , 2))));
-      p_ang = p_ang - target_pitch;
+//       p_ang = p_ang - target_pitch;
       pitch_angle = (pitch_angle + gyro_pitch_acc * 0.01) * 0.98+ 0.02 * (p_ang);
 
       r_ang = degrees(atan2(accel_y , sqrt(pow(accel_x, 2) + pow(accel_z , 2))));
-      r_ang = r_ang - target_roll;
+//       r_ang = r_ang - target_roll;
       roll_angle = (roll_angle + gyro_roll_acc * 0.01) * 0.98 + 0.02 * (r_ang);
 
       y_ang = degrees(atan2(accel_z , sqrt(pow(accel_x, 2) + pow(accel_y , 2))));
-      y_ang = y_ang - target_yaw;
-      yaw_angle = (yaw_angle + gyro_yaw_acc * 0.01) * 0.98 + 0.02 * (y_ang);
+//       y_ang = y_ang - target_yaw;
+//       yaw_angle = (yaw_angle + gyro_yaw_acc * 0.01) * 0.98 + 0.02 * (y_ang);
 
     
   
@@ -194,6 +194,8 @@ void loop() {
       rollR = 0;
       yawCC = 0;
       yawCCW = 0;
+      target_pitch = map(pitch, 1500, 2000, 0, 30);
+      target_roll = map(pitch, 1500, 2000, 0, 30);
       //calculate PITCH compensation for front and rear motors
       if (pitch > 1509) {
         //lift rear motors up
@@ -231,6 +233,20 @@ void loop() {
         yawCC = map(yaw, 1500, 1000, 0, ROLL_MAX);
         yawCCW = -yawCC;      }
 
+      
+/*
+
+THE ERROR IS:
+*/
+err_pitch = map(target_pitch - pitch_angle, 0, 45, 0, 100); 
+err_roll = map(target_roll - roll_angle, 0, 45, 0, 100);
+
+// now map this to actual compensation.
+
+/*
+
+*/
+      
       /* Proportional
        * Short summary: The larger the error, the harder it tries to compensate.
        * Thus the compensation is *proportional* to the erro

@@ -35,6 +35,9 @@ float filteredAccel[3] = {0.0, 0.0, 0.0};
 
 //Compensation values calculated for various axes
 int pitchF, rollL, yawCCW;
+int pitchP, pitchI, pitchD;
+int rollP, rollI, rollD;
+int yawP, yawD;
 //D variables
 int error_p_prev, error_r_prev, error_y_prev;
 //I variable
@@ -155,6 +158,16 @@ void serialTransmit() {
     sendData(motorCommand[FRONT_RIGHT]);
     sendData(motorCommand[REAR_RIGHT]);
     sendData(motorCommand[REAR_LEFT]);
+    /*----PID----*/
+    sendData("pid");
+    sendData(pitchP);
+    sendData(pitchI);
+    sendData(pitchD);
+    sendData(rollP);
+    sendData(rollI);
+    sendData(rollD);
+    sendData(yawP);
+    sendData(yawD);
     sendData("}");
     Serial.println();
     /*
@@ -179,7 +192,13 @@ void loop() {
 
         serialReceive();
         if (simulated) {
+            /*WARNING EXTREMLY DANGEROUS*/
+            /*DO NOT PERFORM ON BATTERY POWER OR PROPELLERS MOUNTED*/
             rcMode = 2000;
+            rcThrottle = 1400;
+            rcPitch = 1500;
+            rcRoll = 1500;
+            rcYaw = 1500;
         }
 
         gyroll = degrees(gyroRate[XAXIS]);
@@ -202,21 +221,19 @@ void loop() {
         target_pitch = map(rcPitch, 1000, 2000, -30, 30);
         target_roll = map(rcRoll, 1000, 2000, -30, 30);
 
-        //err_pitch = map(target_pitch - pitch_angle, 0, 45, 0, 100);
-        //err_roll = map(target_roll - roll_angle, 0, 45, 0, 100);
-
 
         /* Proportional
            Short summary: The larger the error, the harder it tries to compensate.
            Thus the compensation is *proportional* to the error
          */
 #define P 1.5
-        pitchF += gypitch * P; //+ve gypitch indicates forward dive, so increase forward thrust
-        rollL -= gyroll * P; //+ve gyroll indicates right side dive, so compensate by increasing right thrust
-#define Py 3
+        //+ve gypitch indicates forward dive, so increase forward thrust
+        pitchP = gypitch * P;
+        //+ve gyroll indicates right side dive, so compensate by increasing right thrust
+        rollP = -gyroll * P;
         //+ve gyyaw indicates anticlockwise drift of the body, so compensate by increasing anticlockwise motors speed
-        yawCCW += gyyaw * Py; // thus inducing anti-clockwise reaction on the body
-
+        // thus inducing anti-clockwise reaction on the body
+        yawP = gyyaw * 3;
 
         /* Derivative
            Short summary: It tries to reduce the rate of change of error, for better or worse
@@ -227,12 +244,9 @@ void loop() {
         int delta_roll = gyroll - error_r_prev;
         int delta_yaw = gyyaw - error_y_prev;
 
-        pitchF += delta_pitch * D;
-        //        pitchR -= delta_pitch * D;
-
-        rollL -= delta_roll * D;
-        //        rollR += delta_roll * D;
-        yawCCW += delta_yaw * 0.1;
+        pitchD = delta_pitch * D;
+        rollD = -delta_roll * D;
+        yawD = delta_yaw * 0.1;
 
         error_p_prev = gypitch;
         error_r_prev = gyroll;
@@ -246,19 +260,17 @@ void loop() {
         /*TODO : THINKING ABOUT REPLACING THIS WITH ABSOLUTE ANGLE*/
 #define I 4
 #define I_MAX 100
-//        error_p_total += gypitch * 0.005;
-//        pitchF += constrain(I * error_p_total, -I_MAX, I_MAX);
-//
-//        error_r_total += gyroll * 0.005;
-//        rollL -= constrain(I * error_r_total, -I_MAX, I_MAX);
-        
-        pitchF += constrain(I * (degrees(kinematicsAngle[YAXIS]) - target_pitch), -I_MAX, I_MAX );
-        rollL -= constrain(I * (degrees(kinematicsAngle[XAXIS]) - target_roll), -I_MAX, I_MAX);
+        pitchI = constrain(I * (degrees(kinematicsAngle[YAXIS]) - target_pitch), -I_MAX, I_MAX);
+        rollI = -constrain(I * (degrees(kinematicsAngle[XAXIS]) - target_roll), -I_MAX, I_MAX);
 
-        /******************* TODO: ABSOLUTE ANGLE *************************/
+        pitchF = pitchP + pitchI + pitchD;
+        rollL = rollP + rollI + rollD;
+        yawCCW = yawP + yawD;
 
-
-        /***************************************************************/
+        /*Finally Throttle tilt compensation*/
+        float rollTilt = 120 * (sin(abs(kinematicsAngle[XAXIS])));
+        float pitchTilt = 120 * (sin(abs(kinematicsAngle[YAXIS])));
+        rcThrottle += rollTilt + pitchTilt;
 
         /* writing into the motors : last step */
         if (rcMode < 1500) { //Safety Check

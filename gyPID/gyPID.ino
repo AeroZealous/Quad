@@ -49,11 +49,13 @@ int error_p_total, error_r_total, error_y_total;
 
 #define constrainPPM(x) (constrain((x), 1000,2000))
 float x0, y0, z0;
+
 float sinx, siny, cosx, cosy, cosz;
 /*************** for accelerometer*****/
 float target_roll = 0, target_pitch = 0, target_yaw = 0;
 float roll_angle_prev, pitch_angle_prev = 0, yaw_angle_prev = 0;
 float pitch_acc , pitch_acc_prev;
+
 /******************/
 
 
